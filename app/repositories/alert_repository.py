@@ -14,11 +14,13 @@ class AlertRepository:
         return result.scalar_one_or_none()
 
     async def get_by_user(self, user_id: int) -> list[Alert]:
+        # Возвращает все алерты конкретного пользователя
         stmt = select(Alert).where(Alert.user_id == user_id)
         result = await self._session.execute(stmt)
         return list(result.scalars().all())
 
     async def get_enabled(self) -> list[Alert]:
+        # Возвращает только активные алерты — используется в Celery-задаче проверки
         stmt = select(Alert).where(Alert.enabled.is_(True))
         result = await self._session.execute(stmt)
         return list(result.scalars().all())
@@ -31,6 +33,7 @@ class AlertRepository:
         return alert
 
     async def set_enabled(self, alert: Alert, enabled: bool) -> Alert:
+        # Включает или отключает алерт без удаления из базы
         alert.enabled = enabled
         await self._session.commit()
         await self._session.refresh(alert)

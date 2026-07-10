@@ -10,16 +10,19 @@ from app.schemas.price_history import PriceHistoryCreate, PriceHistoryResponse
 from app.services.price_history_service import PriceHistoryService
 from sqlalchemy.ext.asyncio import AsyncSession
 
+# Префикс /assets — история цен является суб-ресурсом актива
 router = APIRouter(prefix="/assets", tags=["prices"])
 
 
 def get_price_service(session: AsyncSession = Depends(get_session)) -> PriceHistoryService:
+    # Сервис требует два репозитория — создаём оба с одной и той же сессией
     return PriceHistoryService(AssetRepository(session), PriceHistoryRepository(session))
 
 
 @router.get("/{ticker}/prices", response_model=list[PriceHistoryResponse])
 async def get_price_history(
     ticker: str,
+    # Query параметр с ограничениями: минимум 1, максимум 1000 записей
     limit: int = Query(default=100, ge=1, le=1000),
     service: PriceHistoryService = Depends(get_price_service),
     _: User = Depends(get_current_user),
@@ -34,7 +37,7 @@ async def get_price_history(
 @router.post("/{ticker}/prices", response_model=PriceHistoryResponse, status_code=status.HTTP_201_CREATED)
 async def add_price(
     ticker: str,
-    body: PriceHistoryCreate,
+    body: PriceHistoryCreate,  # тело содержит только поле price
     service: PriceHistoryService = Depends(get_price_service),
     _: User = Depends(get_current_user),
 ) -> PriceHistoryResponse:

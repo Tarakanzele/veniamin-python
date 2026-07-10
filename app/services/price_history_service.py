@@ -6,17 +6,21 @@ from app.repositories.price_history_repository import PriceHistoryRepository
 
 
 class PriceHistoryService:
+    # Сервис зависит от двух репозиториев: для активов и для истории цен
     def __init__(self, asset_repo: AssetRepository, price_repo: PriceHistoryRepository) -> None:
         self._asset_repo = asset_repo
         self._price_repo = price_repo
 
     async def get_history(self, ticker: str, limit: int = 100) -> list[PriceHistory]:
+        # Сначала убеждаемся, что актив существует — иначе непонятно, почему история пуста
         asset = await self._asset_repo.get_by_ticker(ticker.upper())
         if not asset:
             raise AssetNotFoundError(f"Asset '{ticker}' not found")
+        # Запрашиваем историю по id актива
         return await self._price_repo.get_by_asset(asset.id, limit)
 
     async def add_price(self, ticker: str, price: float) -> PriceHistory:
+        # Проверяем актив перед добавлением записи о цене
         asset = await self._asset_repo.get_by_ticker(ticker.upper())
         if not asset:
             raise AssetNotFoundError(f"Asset '{ticker}' not found")

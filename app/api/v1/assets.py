@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 router = APIRouter(prefix="/assets", tags=["assets"])
 
 
+# Локальная фабрика зависимости — создаёт AssetService с репозиторием для текущей сессии
 def get_asset_service(session: AsyncSession = Depends(get_session)) -> AssetService:
     return AssetService(AssetRepository(session))
 
@@ -20,10 +21,28 @@ def get_asset_service(session: AsyncSession = Depends(get_session)) -> AssetServ
 @router.get("/", response_model=list[AssetResponse])
 async def list_assets(
     service: AssetService = Depends(get_asset_service),
-    _: User = Depends(get_current_user),
+    _: User = Depends(get_current_user),  # _ означает: пользователь нужен только для авторизации
 ) -> list[AssetResponse]:
     assets = await service.get_all()
+    # Преобразуем каждую ORM-модель в Pydantic-схему для ответа
     return [AssetResponse.model_validate(a) for a in assets]
+
+
+@router.get("/{ticker}/price")
+async def get_latest_price(
+    ticker: str,
+    service: AssetService = Depends(get_asset_service),
+    _: User = Depends(get_current_user),
+) -> dict:
+    # Убеждаемся, что актив существует, прежде чем смотреть кеш
+    try:
+        await service.get_by_ticker(ticker)
+    except AssetNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+    # Читаем последнюю цену из Redis (быстро, без обращения к PostgreSQL)
+    price = await get_cached_price(ticker)
+    # cached=False означает, что цена ещё не была получена от внешнего провайдера
+    return {"ticker": ticker.upper(), "price": price, "cached": price is not None}
 
 
 @router.get("/{ticker}", response_model=AssetResponse)
@@ -49,6 +68,7 @@ async def create_asset(
     return AssetResponse.model_validate(asset)
 
 
+# PATCH — частичное обновление (только переданные поля)
 @router.patch("/{ticker}", response_model=AssetResponse)
 async def update_asset(
     ticker: str,
@@ -63,20 +83,7 @@ async def update_asset(
     return AssetResponse.model_validate(asset)
 
 
-@router.get("/{ticker}/price")
-async def get_latest_price(
-    ticker: str,
-    service: AssetService = Depends(get_asset_service),
-    _: User = Depends(get_current_user),
-) -> dict:
-    try:
-        await service.get_by_ticker(ticker)
-    except AssetNotFoundError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
-    price = await get_cached_price(ticker)
-    return {"ticker": ticker.upper(), "price": price, "cached": price is not None}
-
-
+# 204 No Content — успешное удаление не возвращает тело ответа
 @router.delete("/{ticker}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_asset(
     ticker: str,

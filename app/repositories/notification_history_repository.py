@@ -12,7 +12,9 @@ class NotificationHistoryRepository:
         stmt = (
             select(NotificationHistory)
             .where(NotificationHistory.user_id == user_id)
+            # Новые уведомления идут первыми
             .order_by(NotificationHistory.created_at.desc())
+            # Ограничиваем количество, чтобы не перегружать ответ
             .limit(limit)
         )
         result = await self._session.execute(stmt)

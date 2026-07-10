@@ -14,23 +14,29 @@ class AnalyticsService:
         if not asset:
             raise AssetNotFoundError(f"Asset '{ticker}' not found")
 
+        # Получаем последние N записей цен (уже отсортированы от новых к старым)
         records = await self._price_repo.get_by_asset(asset.id, limit)
         if not records:
             raise AssetNotFoundError(f"No price data for '{ticker}'")
 
+        # Извлекаем только значения цен для вычислений
         prices = [r.price for r in records]
+        # Первый элемент — самая свежая цена (записи отсортированы по убыванию)
         current = prices[0]
+        # Последний элемент — самая старая цена в выборке
         oldest = prices[-1]
+        # Абсолютное изменение цены
         change = current - oldest
+        # Процентное изменение; защита от деления на ноль
         change_pct = (change / oldest * 100) if oldest != 0 else 0.0
 
         return AssetAnalyticsResponse(
             ticker=asset.ticker,
             current_price=current,
-            min_price=min(prices),
-            max_price=max(prices),
-            avg_price=sum(prices) / len(prices),
+            min_price=min(prices),   # минимальная цена за период
+            max_price=max(prices),   # максимальная цена за период
+            avg_price=sum(prices) / len(prices),  # средняя цена за период
             price_change=change,
             price_change_pct=round(change_pct, 4),
-            data_points=len(prices),
+            data_points=len(prices),  # сколько точек данных использовалось
         )

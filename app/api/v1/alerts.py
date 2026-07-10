@@ -1,8 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from app.api.v1.dependencies import get_current_user
-from app.db.session import get_session
 from app.core.exceptions import AlertNotFoundError
+from app.db.session import get_session
 from app.models.user import User
 from app.repositories.alert_repository import AlertRepository
 from app.repositories.notification_history_repository import NotificationHistoryRepository
@@ -23,6 +23,7 @@ async def list_alerts(
     service: AlertService = Depends(get_alert_service),
     current_user: User = Depends(get_current_user),
 ) -> list[AlertResponse]:
+    # Передаём id текущего пользователя — видим только свои алерты
     alerts = await service.get_user_alerts(current_user.id)
     return [AlertResponse.model_validate(a) for a in alerts]
 
@@ -33,14 +34,16 @@ async def create_alert(
     service: AlertService = Depends(get_alert_service),
     current_user: User = Depends(get_current_user),
 ) -> AlertResponse:
+    # Алерт создаётся от имени текущего пользователя
     alert = await service.create(current_user.id, body.asset_id, body.condition, body.value)
     return AlertResponse.model_validate(alert)
 
 
+# PATCH используем для включения/выключения алерта (не удаления)
 @router.patch("/{alert_id}", response_model=AlertResponse)
 async def update_alert(
     alert_id: int,
-    body: AlertUpdate,
+    body: AlertUpdate,  # содержит только поле enabled: bool
     service: AlertService = Depends(get_alert_service),
     current_user: User = Depends(get_current_user),
 ) -> AlertResponse:
@@ -58,6 +61,7 @@ async def delete_alert(
     current_user: User = Depends(get_current_user),
 ) -> None:
     try:
+        # Передаём user_id — сервис проверит, что алерт принадлежит этому пользователю
         await service.delete(alert_id, current_user.id)
     except AlertNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
@@ -65,10 +69,12 @@ async def delete_alert(
 
 @router.get("/notifications", response_model=list[NotificationHistoryResponse])
 async def get_notifications(
+    # Ограничиваем количество уведомлений в ответе
     limit: int = Query(default=50, ge=1, le=200),
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ) -> list[NotificationHistoryResponse]:
+    # Репозиторий используем напрямую — дополнительной логики здесь нет
     repo = NotificationHistoryRepository(session)
     records = await repo.get_by_user(current_user.id, limit)
     return [NotificationHistoryResponse.model_validate(r) for r in records]
