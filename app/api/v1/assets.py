@@ -7,6 +7,7 @@ from app.models.user import User
 from app.repositories.asset_repository import AssetRepository
 from app.schemas.asset import AssetCreate, AssetResponse, AssetUpdate
 from app.services.asset_service import AssetService
+from app.utils.cache import get_cached_price
 from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter(prefix="/assets", tags=["assets"])
@@ -60,6 +61,20 @@ async def update_asset(
     except AssetNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
     return AssetResponse.model_validate(asset)
+
+
+@router.get("/{ticker}/price")
+async def get_latest_price(
+    ticker: str,
+    service: AssetService = Depends(get_asset_service),
+    _: User = Depends(get_current_user),
+) -> dict:
+    try:
+        await service.get_by_ticker(ticker)
+    except AssetNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+    price = await get_cached_price(ticker)
+    return {"ticker": ticker.upper(), "price": price, "cached": price is not None}
 
 
 @router.delete("/{ticker}", status_code=status.HTTP_204_NO_CONTENT)

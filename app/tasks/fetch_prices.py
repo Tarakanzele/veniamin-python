@@ -4,7 +4,9 @@ from app.core.logging import logger
 from app.db.session import async_session_factory
 from app.repositories.asset_repository import AssetRepository
 from app.repositories.price_history_repository import PriceHistoryRepository
+from app.utils.cache import cache_price
 from app.utils.market.yahoo_provider import YahooMarketProvider
+from app.utils.ws_manager import ws_manager
 from app.workers.celery_app import celery_app
 
 
@@ -35,5 +37,7 @@ async def _fetch_prices_async() -> None:
             price = prices.get(asset.ticker)
             if price is not None:
                 await price_repo.add(asset.id, price)
+                await cache_price(asset.ticker, price)
+                await ws_manager.broadcast(asset.ticker, price)
 
         logger.info("Fetched and saved prices for %d assets", len(prices))
