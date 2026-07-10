@@ -1,0 +1,6 @@
+from typing import Protocol
+
+
+class MarketProvider(Protocol):
+    async def get_price(self, ticker: str) -> float: ...
+    async def get_prices(self, tickers: list[str]) -> dict[str, float]: ...
